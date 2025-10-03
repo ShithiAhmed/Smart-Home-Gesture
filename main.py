@@ -108,7 +108,7 @@ print("Saved: train_data_features.npy and train_data_labels.npy")
 
 
 def predict_test_set():
-    test_video_dir = "TestData"
+    test_video_dir = "test"
     test_frames_dir = "testdata_frames"
     os.makedirs(test_frames_dir, exist_ok=True)
 
