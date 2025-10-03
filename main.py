@@ -143,7 +143,8 @@ def predict_test_set():
             predicted_label = train_labels[most_similar_index]
 
             print(f"✅ Predicted label for {filename}: {predicted_label}")
-            results.append([filename, predicted_label])
+            # results.append([filename, predicted_label])
+            results.append([predicted_label])
 
         except Exception as e:
             print(f"⚠️ Error processing {filename}: {e}")
@@ -152,7 +153,9 @@ def predict_test_set():
 
     with open("Results.csv", mode="w", newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(["VideoName", "PredictedLabel"])
+        # writer.writerow(["VideoName", "PredictedLabel"])
+        # writer.writerows(results)
+        writer.writerow(["PredictedLabel"])
         writer.writerows(results)
 
     print("🎉 Prediction complete. Results saved in Results.csv")
