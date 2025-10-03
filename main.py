@@ -1,29 +1,79 @@
-
-
-
-## import the handfeature extractor class
-
-# =============================================================================
-# Get the penultimate layer for trainig data
-# =============================================================================
-# your code goes here
-# Extract the middle frame of each gesture video
 import os
 import cv2
 import numpy as np
+import csv
 from frameextractor import frameExtractor
 from handshape_feature_extractor import HandShapeFeatureExtractor
+from sklearn import svm
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+from sklearn.metrics.pairwise import cosine_similarity
+import joblib
 
-# Define paths
+# -------------------------------
+# Step 1: Frame Extraction (Train)
+# -------------------------------
 video_dir = "traindata/Videos_[HusnaAhmedShithi]/"
 frames_dir = "traindata/frames"
+os.makedirs(frames_dir, exist_ok=True)
 
-# Initialize counter
 count = 0
 
-# Make sure the output folder exists
+print("\n✅ Frame extraction complete. Now extracting features...\n")
+
+# -------------------------------
+# Step 2: Feature Extraction (Train)
+# -------------------------------
+feature_extractor = HandShapeFeatureExtractor.get_instance()
+
+features = []
+labels = []
+
+# label_map = {
+#     "Num0": 0,
+#     "Num1": 1,
+#     "Num2": 2,
+#     "Num3": 3,
+#     "Num4": 4,
+#     "Num5": 5,
+#     "Num6": 6,
+#     "Num7": 7,
+#     "Num8": 8,
+#     "Num9": 9,
+#     "FanDown": 10,
+#     "FanOff": 11,
+#     "FanOn": 12,
+#     "FanUp": 13,
+#     "LightOff": 14,
+#     "LightOn": 15,
+#     "SetThermo": 16
+    
+# }
+
+label_map = {
+    "0": 0,
+    "1": 1,
+    "2": 2,
+    "3": 3,
+    "4": 4,
+    "5": 5,
+    "6": 6,
+    "7": 7,
+    "8": 8,
+    "9": 9,
+    "DecreaseFanSpeed": 10,
+    "FanOff": 11,
+    "FanOn": 12,
+    "IncreaseFanSpeed": 13,
+    "LightOff": 14,
+    "LightOn": 15,
+    "SetThermo": 16
+    
+}
+
+
 for filename in os.listdir(video_dir):
-    if filename.startswith('.'):  # skip hidden/trash files
+    if filename.startswith('.') or not filename.endswith('.mp4'):
         continue
 
     videopath = os.path.join(video_dir, filename)
@@ -31,35 +81,24 @@ for filename in os.listdir(video_dir):
 
     try:
         frameExtractor(videopath, frames_dir, count)
-    except Exception as e:
-        print(f"Skipping {filename}, error: {e}")
-    count += 1
-print("\n✅ Frame extraction complete. Now extracting features...\n")
-
-# --- STEP 2: Extract features using CNN model ---
-feature_extractor = HandShapeFeatureExtractor.get_instance()
-
-features = []
-labels = []
-
-for filename in os.listdir(frames_dir):
-    if not filename.endswith(".png"):
-        continue
-
-    img_path = os.path.join(frames_dir, filename)
-    label = filename.split("_")[0]  # e.g. LightOn_1.png → "LightOn"
-
-    try:
+        img_path = os.path.join(frames_dir, "%#05d.png" % (count+1))
         image = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
         feature = feature_extractor.extract_feature(image)
         features.append(feature)
-        labels.append(label)
+        
+        label = filename.split("-")[-1] 
+        label = label.replace(".mp4","")
+        label_index = label_map[label]
+        labels.append(label_index)
     except Exception as e:
         print(f"Skipping {filename}, error: {e}")
+    count += 1
 
-# --- STEP 3: Save features and labels as .npy files ---
+
+
 features = np.array(features).squeeze()
 labels = np.array(labels)
+
 
 np.save("train_data_features.npy", features)
 np.save("train_data_labels.npy", labels)
@@ -68,31 +107,57 @@ print("✅ Feature extraction complete.")
 print("Saved: train_data_features.npy and train_data_labels.npy")
 
 
-from sklearn import svm
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
-import joblib
-import numpy as np
+def predict_test_set():
+    test_video_dir = "TestData"
+    test_frames_dir = "testdata_frames"
+    os.makedirs(test_frames_dir, exist_ok=True)
 
-print("▶️ Starting SVM training...")
+    train_features = np.load("train_data_features.npy")
+    train_labels = np.load("train_data_labels.npy")
 
-# Load features and labels
-features = np.load("train_data_features.npy")
-labels = np.load("train_data_labels.npy")
+    feature_extractor = HandShapeFeatureExtractor.get_instance()
+    results = []
 
-# Split into train and test
-X_train, X_test, y_train, y_test = train_test_split(features, labels, test_size=0.2, random_state=42)
+    count = 0
+    for filename in sorted(os.listdir(test_video_dir)):
+        if filename.startswith('.') or not filename.endswith('.mp4'):
+            continue
 
-# Train SVM
-classifier = svm.SVC(kernel='linear')
-classifier.fit(X_train, y_train)
+        videopath = os.path.join(test_video_dir, filename)
+        print("🔍 Processing test video:", videopath)
 
-# Evaluate
-y_pred = classifier.predict(X_test)
-accuracy = accuracy_score(y_test, y_pred)
-print(f"✅ SVM training complete. Accuracy: {accuracy:.2f}")
+        try:
+            frameExtractor(videopath, test_frames_dir, count)
+            frame_path = os.path.join(test_frames_dir, "%#05d.png" % (count+1))
 
-# Save model
-joblib.dump(classifier, "svm_model.pkl")
-print("📦 Saved model: svm_model.pkl")
+            if not os.path.exists(frame_path):
+                print(f"⚠️ No frame found for {filename}, skipping.")
+                count += 1
+                continue
+
+            image = cv2.imread(frame_path, cv2.IMREAD_GRAYSCALE)
+            test_feature = feature_extractor.extract_feature(image)
+
+            similarities = cosine_similarity(test_feature, train_features)[0]
+            most_similar_index = np.argmax(similarities)
+            predicted_label = train_labels[most_similar_index]
+
+            print(f"✅ Predicted label for {filename}: {predicted_label}")
+            results.append([filename, predicted_label])
+
+        except Exception as e:
+            print(f"⚠️ Error processing {filename}: {e}")
+
+        count += 1
+
+    with open("Results.csv", mode="w", newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["VideoName", "PredictedLabel"])
+        writer.writerows(results)
+
+    print("🎉 Prediction complete. Results saved in Results.csv")
+
+# Call the prediction function
+predict_test_set()
+
 
