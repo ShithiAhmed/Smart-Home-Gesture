@@ -26,5 +26,4 @@ The task involves:
 5. **Output**: All predictions are saved to `Results.csv` in the correct autograder format.
 
 
-## Directory Structure
 
